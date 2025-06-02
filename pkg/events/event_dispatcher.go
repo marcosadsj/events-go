@@ -35,6 +35,17 @@ func (ed *EventDispatcher) Register(eventName string, handler IEventHandler) err
 }
 
 func (ed *EventDispatcher) Clear() error {
+
 	ed.handlers = make(map[string][]IEventHandler)
+
 	return nil
+}
+
+func (ed *EventDispatcher) Has(eventName string, handler IEventHandler) bool {
+
+	if handlers, ok := ed.handlers[eventName]; ok {
+		return slices.Contains(handlers, handler)
+	}
+
+	return false
 }

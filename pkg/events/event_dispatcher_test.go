@@ -96,6 +96,24 @@ func (suite *EventDispatchetTestSuite) TestEventDispatcher_Clear() {
 	suite.Equal(0, len(suite.eventDispatcher.handlers), "Expected all handlers to be cleared")
 }
 
+func (suite *EventDispatchetTestSuite) TestEventDispatcher_Has() {
+	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
+	suite.NoError(err, "Expected no error when registering a handler")
+
+	err = suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler2)
+	suite.NoError(err, "Expected no error when registering a second handler for the same event")
+	suite.Equal(2, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected two handlers registered for the event")
+
+	hasHandler := suite.eventDispatcher.Has(suite.event.GetName(), &suite.handler)
+	suite.True(hasHandler, "Expected handler to be registered for the event")
+
+	hasHandler = suite.eventDispatcher.Has(suite.event.GetName(), &suite.handler2)
+	suite.True(hasHandler, "Expected handler2 to be registered for the event")
+
+	hasHandler = suite.eventDispatcher.Has(suite.event.GetName(), &suite.handler3)
+	suite.False(hasHandler, "Expected handler3 not to be registered for the event")
+}
+
 func TestSuite(t *testing.T) {
 	suite.Run(t, new(EventDispatchetTestSuite))
 }
