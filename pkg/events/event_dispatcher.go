@@ -33,3 +33,8 @@ func (ed *EventDispatcher) Register(eventName string, handler IEventHandler) err
 
 	return nil
 }
+
+func (ed *EventDispatcher) Clear() error {
+	ed.handlers = make(map[string][]IEventHandler)
+	return nil
+}
