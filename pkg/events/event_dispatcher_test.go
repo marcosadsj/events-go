@@ -141,6 +141,35 @@ func (suite *EventDispatchetTestSuite) TestEventDispatcher_Dispatch() {
 	eh.AssertNotCalled(suite.T(), "Handle", &suite.event2, "Expected handler not to be called with a different event")
 }
 
+func (suite *EventDispatchetTestSuite) TestEventDispatcher_Remove() {
+	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
+	suite.NoError(err, "Expected no error when registering a handler")
+	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the event")
+
+	err = suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler2)
+	suite.NoError(err, "Expected no error when registering a second handler for a different event")
+	suite.Equal(2, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the second event")
+
+	err = suite.eventDispatcher.Register(suite.event2.GetName(), &suite.handler3)
+	suite.NoError(err, "Expected no error when registering a third handler for the second event")
+	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event2.GetName()]), "Expected one handler registered for the second event")
+
+	err = suite.eventDispatcher.Remove(suite.event.GetName(), &suite.handler)
+	suite.NoError(err, "Expected no error when removing a handler")
+	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler remaining for the event after removal")
+
+	err = suite.eventDispatcher.Remove(suite.event.GetName(), &suite.handler2)
+	suite.NoError(err, "Expected no error when removing a second handler")
+	suite.Equal(0, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected no handlers remaining for the event after removing all handlers")
+
+	err = suite.eventDispatcher.Remove(suite.event2.GetName(), &suite.handler3)
+	suite.NoError(err, "Expected no error when removing a handler from a different event")
+	suite.Equal(0, len(suite.eventDispatcher.handlers[suite.event2.GetName()]), "Expected no handlers remaining for the second event after removing all handlers")
+
+	err = suite.eventDispatcher.Remove(suite.event2.GetName(), &suite.handler)
+	suite.Error(err, "Expected error when trying to remove a handler that is not registered for the event")
+}
+
 func TestSuite(t *testing.T) {
 	suite.Run(t, new(EventDispatchetTestSuite))
 }
