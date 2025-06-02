@@ -7,6 +7,8 @@ import (
 
 var (
 	ErrHandlerAlreadyRegistered = errors.New("handler already registered for this event")
+	ErrEventNotFound            = errors.New("event not found")
+	ErrHandlerNotFound          = errors.New("handler not found for this event")
 )
 
 type EventDispatcher struct {
@@ -58,4 +60,26 @@ func (ed *EventDispatcher) Has(eventName string, handler IEventHandler) bool {
 	}
 
 	return false
+}
+
+func (ed *EventDispatcher) Remove(eventName string, handler IEventHandler) error {
+
+	if handlers, ok := ed.handlers[eventName]; ok {
+
+		index := slices.Index(handlers, handler)
+
+		if index != -1 {
+
+			if len(ed.handlers[eventName]) == 0 {
+
+				return ErrHandlerNotFound
+			}
+
+			ed.handlers[eventName] = slices.Delete(handlers, index, index+1)
+
+			return nil
+		}
+	}
+
+	return ErrEventNotFound
 }
