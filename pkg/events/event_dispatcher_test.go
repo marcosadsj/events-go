@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -51,6 +52,7 @@ func (suite *EventDispatchetTestSuite) SetupTest() {
 	suite.event = TestEvent{Name: "TestEvent", Payload: "TestPayload"}
 	suite.event2 = TestEvent{Name: "TestEvent2", Payload: "TestPayload2"}
 }
+
 func (suite *EventDispatchetTestSuite) TestEventDispatcher_Register() {
 
 	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
@@ -112,6 +114,31 @@ func (suite *EventDispatchetTestSuite) TestEventDispatcher_Has() {
 
 	hasHandler = suite.eventDispatcher.Has(suite.event.GetName(), &suite.handler3)
 	suite.False(hasHandler, "Expected handler3 not to be registered for the event")
+}
+
+type MockEventHandler struct {
+	mock.Mock
+}
+
+func (m *MockEventHandler) Handle(event IEvent) {
+	m.Called(event)
+}
+
+func (suite *EventDispatchetTestSuite) TestEventDispatcher_Dispatch() {
+	eh := &MockEventHandler{}
+
+	eh.On("Handle", &suite.event)
+
+	suite.eventDispatcher.Register(suite.event.GetName(), eh)
+	err := suite.eventDispatcher.Dispatch(&suite.event)
+	suite.NoError(err, "Expected no error when dispatching an event")
+	eh.AssertExpectations(suite.T())
+
+	err = suite.eventDispatcher.Dispatch(&suite.event2)
+	suite.NoError(err, "Expected no error when dispatching a different event")
+
+	eh.AssertNumberOfCalls(suite.T(), "Handle", 1)
+	eh.AssertNotCalled(suite.T(), "Handle", &suite.event2, "Expected handler not to be called with a different event")
 }
 
 func TestSuite(t *testing.T) {
