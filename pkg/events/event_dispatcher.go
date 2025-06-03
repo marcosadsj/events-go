@@ -3,6 +3,7 @@ package events
 import (
 	"errors"
 	"slices"
+	"sync"
 )
 
 var (
@@ -22,10 +23,17 @@ func NewEventDispatcher() *EventDispatcher {
 }
 
 func (ed *EventDispatcher) Dispatch(event IEvent) error {
+
+	wg := &sync.WaitGroup{}
+
 	if handlers, ok := ed.handlers[event.GetName()]; ok {
 		for _, handler := range handlers {
-			handler.Handle(event)
+			wg.Add(1)
+			handler.Handle(event, wg)
 		}
+
+		wg.Wait()
+
 		return nil
 	}
 	return nil // No handlers registered for this event
