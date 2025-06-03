@@ -1,6 +1,7 @@
 package events
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -30,11 +31,12 @@ type TestEventHandler struct {
 	ID int
 }
 
-func (h *TestEventHandler) Handle(event IEvent) {
+func (h *TestEventHandler) Handle(event IEvent, wg *sync.WaitGroup) {
 	// Handle the event
+	wg.Done()
 }
 
-type EventDispatchetTestSuite struct {
+type EventDispatcherTestSuite struct {
 	suite.Suite
 	event           TestEvent
 	event2          TestEvent
@@ -44,7 +46,7 @@ type EventDispatchetTestSuite struct {
 	eventDispatcher *EventDispatcher
 }
 
-func (suite *EventDispatchetTestSuite) SetupTest() {
+func (suite *EventDispatcherTestSuite) SetupTest() {
 	suite.eventDispatcher = NewEventDispatcher()
 	suite.handler = TestEventHandler{ID: 1}
 	suite.handler2 = TestEventHandler{ID: 2}
@@ -53,7 +55,7 @@ func (suite *EventDispatchetTestSuite) SetupTest() {
 	suite.event2 = TestEvent{Name: "TestEvent2", Payload: "TestPayload2"}
 }
 
-func (suite *EventDispatchetTestSuite) TestEventDispatcher_Register() {
+func (suite *EventDispatcherTestSuite) TestEventDispatcher_Register() {
 
 	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
 
@@ -61,58 +63,72 @@ func (suite *EventDispatchetTestSuite) TestEventDispatcher_Register() {
 	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the event")
 
 	err = suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler2)
+
 	suite.NoError(err, "Expected no error when registering a second handler for the same event")
 	suite.Equal(2, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected two handlers registered for the event")
 
-	assert.Equal(suite.T(), &suite.handler, suite.eventDispatcher.handlers[suite.event.GetName()][1], "Expected second handler to be registered correctly")
+	assert.Equal(suite.T(), &suite.handler, suite.eventDispatcher.handlers[suite.event.GetName()][0], "Expected first handler to be registered correctly")
 
 	assert.Equal(suite.T(), &suite.handler2, suite.eventDispatcher.handlers[suite.event.GetName()][1], "Expected second handler to be registered correctly")
 }
 
-func (suite *EventDispatchetTestSuite) TestEventDispatcher_Register_AlreadyRegistered() {
+func (suite *EventDispatcherTestSuite) TestEventDispatcher_Register_AlreadyRegistered() {
+
 	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
+
 	suite.NoError(err, "Expected no error when registering a handler")
 	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the event")
 
 	err = suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
+
 	suite.Error(err, "Expected error when registering the same handler again")
 	suite.Equal(ErrHandlerAlreadyRegistered, err, "Expected specific error for already registered handler")
 	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected still only one handler registered for the event")
 }
 
-func (suite *EventDispatchetTestSuite) TestEventDispatcher_Clear() {
+func (suite *EventDispatcherTestSuite) TestEventDispatcher_Clear() {
 	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
+
 	suite.NoError(err, "Expected no error when registering a handler")
 	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the event")
 
 	err = suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler2)
+
 	suite.NoError(err, "Expected no error when registering a second handler for a different event")
 	suite.Equal(2, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the second event")
 
 	err = suite.eventDispatcher.Register(suite.event2.GetName(), &suite.handler3)
+
 	suite.NoError(err, "Expected no error when registering a third handler for the second event")
 	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event2.GetName()]), "Expected one handler registered for the second event")
 
 	err = suite.eventDispatcher.Clear()
+
 	suite.NoError(err, "Expected no error when clearing all handlers")
 	suite.Equal(0, len(suite.eventDispatcher.handlers), "Expected all handlers to be cleared")
 }
 
-func (suite *EventDispatchetTestSuite) TestEventDispatcher_Has() {
+func (suite *EventDispatcherTestSuite) TestEventDispatcher_Has() {
+
 	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
+
 	suite.NoError(err, "Expected no error when registering a handler")
 
 	err = suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler2)
+
 	suite.NoError(err, "Expected no error when registering a second handler for the same event")
 	suite.Equal(2, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected two handlers registered for the event")
 
 	hasHandler := suite.eventDispatcher.Has(suite.event.GetName(), &suite.handler)
+
 	suite.True(hasHandler, "Expected handler to be registered for the event")
 
 	hasHandler = suite.eventDispatcher.Has(suite.event.GetName(), &suite.handler2)
+
 	suite.True(hasHandler, "Expected handler2 to be registered for the event")
 
 	hasHandler = suite.eventDispatcher.Has(suite.event.GetName(), &suite.handler3)
+
 	suite.False(hasHandler, "Expected handler3 not to be registered for the event")
 }
 
@@ -120,28 +136,60 @@ type MockEventHandler struct {
 	mock.Mock
 }
 
-func (m *MockEventHandler) Handle(event IEvent) {
+func (m *MockEventHandler) Handle(event IEvent, wg *sync.WaitGroup) {
 	m.Called(event)
+	wg.Done()
 }
 
-func (suite *EventDispatchetTestSuite) TestEventDispatcher_Dispatch() {
+func (suite *EventDispatcherTestSuite) TestEventDispatcher_Dispatch() {
 	eh := &MockEventHandler{}
 
 	eh.On("Handle", &suite.event)
 
-	suite.eventDispatcher.Register(suite.event.GetName(), eh)
-	err := suite.eventDispatcher.Dispatch(&suite.event)
-	suite.NoError(err, "Expected no error when dispatching an event")
-	eh.AssertExpectations(suite.T())
+	eh2 := &MockEventHandler{}
+	eh2.On("Handle", &suite.event)
+
+	eh3 := &MockEventHandler{}
+	eh3.On("Handle", &suite.event2)
+
+	err := suite.eventDispatcher.Register(suite.event.GetName(), eh)
+
+	suite.NoError(err, "Expected no error when registering a handler")
+	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the event")
+
+	err = suite.eventDispatcher.Register(suite.event.GetName(), eh2)
+
+	suite.NoError(err, "Expected no error when registering a second handler for the same event")
+	suite.Equal(2, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected two handlers registered for the event")
+
+	err = suite.eventDispatcher.Register(suite.event2.GetName(), eh3)
+
+	suite.NoError(err, "Expected no error when registering a third handler for the second event")
+	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event2.GetName()]), "Expected one handler registered for the second event")
+
+	err = suite.eventDispatcher.Dispatch(&suite.event)
+
+	suite.NoError(err, "Expected no error when dispatching the event")
+
+	err = suite.eventDispatcher.Dispatch(&suite.event)
+
+	suite.NoError(err, "Expected no error when dispatching the event")
 
 	err = suite.eventDispatcher.Dispatch(&suite.event2)
+
 	suite.NoError(err, "Expected no error when dispatching a different event")
 
-	eh.AssertNumberOfCalls(suite.T(), "Handle", 1)
-	eh.AssertNotCalled(suite.T(), "Handle", &suite.event2, "Expected handler not to be called with a different event")
+	// eh.AssertExpectations(suite.T())
+	eh.AssertNumberOfCalls(suite.T(), "Handle", 2)
+	eh2.AssertNumberOfCalls(suite.T(), "Handle", 2)
+
+	eh3.AssertNumberOfCalls(suite.T(), "Handle", 1)
+
+	suite.Equal(2, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected two handlers still registered for the event after dispatching")
+	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event2.GetName()]), "Expected one handler still registered for the second event after dispatching")
 }
 
-func (suite *EventDispatchetTestSuite) TestEventDispatcher_Remove() {
+func (suite *EventDispatcherTestSuite) TestEventDispatcher_Remove() {
 	err := suite.eventDispatcher.Register(suite.event.GetName(), &suite.handler)
 	suite.NoError(err, "Expected no error when registering a handler")
 	suite.Equal(1, len(suite.eventDispatcher.handlers[suite.event.GetName()]), "Expected one handler registered for the event")
@@ -171,5 +219,5 @@ func (suite *EventDispatchetTestSuite) TestEventDispatcher_Remove() {
 }
 
 func TestSuite(t *testing.T) {
-	suite.Run(t, new(EventDispatchetTestSuite))
+	suite.Run(t, new(EventDispatcherTestSuite))
 }
